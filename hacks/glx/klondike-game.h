@@ -20,11 +20,24 @@
 #define MAX_WASTE 24
 #define MAX_FOUNDATION 13
 #define MAX_TABLEAU 20
-#define MAX_TEXTURE 53
-#define BACK_TEXTURE 52
+
+// random position offset for sloppy mode
+#define RANDOM_POSITION_OFFSET (bp->sloppy ? (((float)random()) / ((float)RAND_MAX) - 0.5) * 0.0125 : 0)
 
 typedef enum { DIAMONDS, CLUBS, HEARTS, SPADES } Suit;
 typedef enum { NONE=0, ACE, TWO, THREE, FOUR, FIVE, SIX, SEVEN, EIGHT, NINE, TEN, JACK, QUEEN, KING } Rank;
+
+typedef enum {
+  REDEAL_COLLECT_DECK, //0
+  REDEAL_CENTER_DECK,  //1
+  REDEAL_ROTATE_DECK, //2
+  REDEAL_SPLIT_DECK,  //3
+  REDEAL_SHUFFLE_DECK, //4
+  REDEAL_COMBINE_DECKS, //5
+  REDEAL_HOME_DECK, //6
+  REDEAL_DEAL, //7
+  REDEAL_PLAY //8
+} redeal_state;
 
 typedef struct {
     Suit suit;
@@ -43,7 +56,14 @@ typedef struct {
     float angle;
     float start_angle;
     float end_angle;
+    float xy_angle;
+    float start_xy_angle;
+    float end_xy_angle;
     float start_z;    
+    float xz_angle;
+    float start_xz_angle;
+    float end_xz_angle;
+    float animation_lift_factor
 } card_struct;
 
 typedef struct {
@@ -77,7 +97,7 @@ typedef struct {
   float camera_phase;
 
   int final_animation;
-  int redeal;
+  redeal_state redeal_state;
     
   game_state_struct *game_state;
 

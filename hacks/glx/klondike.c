@@ -180,6 +180,8 @@ reshape_klondike(ModeInfo *mi, int width, int height)
  }
 
  initialize_placeholders(&bps[MI_SCREEN(mi)], width, height);
+ bps[MI_SCREEN(mi)].redeal_state = REDEAL_DEAL;
+ 
 
  glClear(GL_COLOR_BUFFER_BIT);
 }
@@ -218,26 +220,29 @@ static void animate_initial_board(klondike_configuration *bp)
  int n = 0;
  for (int i = 0; i < 7; i++)
  {
-     for (int j = 0; j < 7; j++)
-     {
-         if (i < bp->game_state->tableau_size[j])
-         {
-             card_struct *card = &bp->game_state->tableau[j][i];
-             card->start_frame = 10 + n * animation_ticks / 4;
-             card->end_frame = card->start_frame + animation_ticks;
-             card->start_x = bp->deck_x;
-             card->start_y = bp->deck_y;
-             card->dest_x = bp->tableau_placeholders[j].x;
-             card->dest_y = bp->tableau_placeholders[j].y;
-             card->angle = 0.0f;
-             card->start_angle = 0.0f;
-             card->is_face_up = i == bp->game_state->tableau_size[j] - 1;
-             card->end_angle = card->is_face_up ? 180.0f : 0.0f;
+    for (int j = 0; j < 7; j++)
+    {
+        if (i < bp->game_state->tableau_size[j])
+        {
+            card_struct *card = &bp->game_state->tableau[j][i];
+            card->start_frame = 10 + n * animation_ticks / 4;
+            card->end_frame = card->start_frame + animation_ticks;
+            card->start_x = bp->deck_x;
+            card->start_y = bp->deck_y;
+            card->dest_x = bp->tableau_placeholders[j].x + RANDOM_POSITION_OFFSET;
+            card->dest_y = bp->tableau_placeholders[j].y + RANDOM_POSITION_OFFSET;
+            card->angle = 0.0f;
+            card->start_angle = 0.0f;
+            card->is_face_up = i == bp->game_state->tableau_size[j] - 1;
+            card->end_angle = card->is_face_up ? 180.0f : 0.0f;
+            card->animation_lift_factor = 1.0f;
 
-             n++;
-         }
-     }
+            n++;
+        }
+    }
  }
+
+ bp->final_animation = 10 + (n + 1) * animation_ticks / 4 + animation_ticks;
 }
 
 ENTRYPOINT Bool
@@ -375,7 +380,7 @@ init_klondike(ModeInfo *mi)
 
  bp->camera_phase = (random() / (float)RAND_MAX) * 0.2 * M_PI;
 
- bp->redeal = 0;
+ bp->redeal_state = REDEAL_DEAL;
  bp->final_animation = 0;
 
  // set the draw count to 3 if it is not 1 or 3
@@ -431,15 +436,15 @@ static void animate_board_to_deck(klondike_configuration *bp)
  int n = 0;
  for (int i = 0; i < 7; i++)
  {
-     for (int j = 0; j < bp->game_state->tableau_size[i]; j++)
+     for (int j = bp->game_state->tableau_size[i] - 1; j >= 0; j--)
      {
          card_struct *card = &bp->game_state->tableau[i][j];
-         card->start_frame = bp->tick + n * animation_ticks / 12;
+         card->start_frame = bp->tick + n * animation_ticks / 3;
          card->end_frame = card->start_frame + animation_ticks;
          card->start_x = card->x;
          card->start_y = card->y;
-         card->dest_x = bp->deck_x;
-         card->dest_y = bp->deck_y;
+         card->dest_x = bp->deck_x + RANDOM_POSITION_OFFSET;
+         card->dest_y = bp->deck_y + RANDOM_POSITION_OFFSET;
          card->start_angle = card->angle;
          card->end_angle = 360.0f;
          card->is_face_up = 0;
@@ -452,12 +457,12 @@ static void animate_board_to_deck(klondike_configuration *bp)
      for (int j = 0; j < bp->game_state->foundation_size[i]; j++)
      {
          card_struct *card = &bp->game_state->foundation[i][j];
-         card->start_frame = bp->tick + n * animation_ticks / 12;
+         card->start_frame = bp->tick + n * animation_ticks / 3;
          card->end_frame = card->start_frame + animation_ticks;
          card->start_x = card->x;
          card->start_y = card->y;
-         card->dest_x = bp->deck_x;
-         card->dest_y = bp->deck_y;
+         card->dest_x = bp->deck_x + RANDOM_POSITION_OFFSET;
+         card->dest_y = bp->deck_y + RANDOM_POSITION_OFFSET;
          card->start_angle = card->angle;
          card->end_angle = 360.0f;
          card->is_face_up = 0;
@@ -468,19 +473,111 @@ static void animate_board_to_deck(klondike_configuration *bp)
  for (int i = 0; i < bp->game_state->waste_size; i++)
  {
      card_struct *card = &bp->game_state->waste[i];
-     card->start_frame = bp->tick + n * animation_ticks / 12;
+     card->start_frame = bp->tick + n * animation_ticks / 3;
      card->end_frame = card->start_frame + animation_ticks;
      card->start_x = card->x;
      card->start_y = card->y;
-     card->dest_x = bp->deck_x;
-     card->dest_y = bp->deck_y;
+     card->dest_x = bp->deck_x + RANDOM_POSITION_OFFSET;
+     card->dest_y = bp->deck_y + RANDOM_POSITION_OFFSET;
      card->start_angle = card->angle;
      card->end_angle = 360.0f;
      card->is_face_up = 0;
      n++;
  }
 
- bp->final_animation = bp->tick + n * animation_ticks / 12 + animation_ticks;
+
+ bp->final_animation = bp->tick + n * animation_ticks / 3 + animation_ticks;
+}
+
+static void center_deck(klondike_configuration *bp) {
+    for (int i = 0; i < 52; i++) {
+        bp->game_state->deck[i].start_x = bp->game_state->deck[i].x;
+        bp->game_state->deck[i].start_y = bp->game_state->deck[i].y;
+        bp->game_state->deck[i].dest_x = RANDOM_POSITION_OFFSET;
+        bp->game_state->deck[i].dest_y = RANDOM_POSITION_OFFSET;
+        bp->game_state->deck[i].start_frame = bp->tick; 
+        bp->game_state->deck[i].end_frame = bp->tick + animation_ticks;
+        bp->game_state->deck[i].start_xy_angle = bp->game_state->deck[i].xy_angle;
+        bp->game_state->deck[i].end_xy_angle = 0;
+        bp->game_state->deck[i].start_xz_angle = bp->game_state->deck[i].xz_angle;
+        bp->game_state->deck[i].end_xz_angle = 0;
+        bp->game_state->deck[i].animation_lift_factor = 0.0f;
+
+    }
+    bp->final_animation = bp->tick + animation_ticks + 1;
+}
+
+static void home_deck(klondike_configuration *bp) {
+    for (int i = 0; i < 52; i++) {
+
+        bp->game_state->deck[i].start_x = bp->game_state->deck[i].x;
+        bp->game_state->deck[i].start_y = bp->game_state->deck[i].y;
+        bp->game_state->deck[i].start_frame = bp->tick + animation_ticks; 
+        bp->game_state->deck[i].end_frame = bp->tick + 2 * animation_ticks;
+        bp->game_state->deck[i].dest_x = bp->deck_x + RANDOM_POSITION_OFFSET;
+        bp->game_state->deck[i].dest_y = bp->deck_y + RANDOM_POSITION_OFFSET;
+        bp->game_state->deck[i].start_xy_angle = 90.0f;
+        bp->game_state->deck[i].end_xy_angle = 0;
+        bp->game_state->deck[i].start_xz_angle = 0;
+        bp->game_state->deck[i].end_xz_angle = 0;
+        bp->game_state->deck[i].animation_lift_factor = 0.0f;
+    }
+    bp->final_animation = bp->tick + 3 * animation_ticks + 1;
+}
+
+static void split_deck(klondike_configuration *bp) {
+    for (int i = 0; i < 52; i++) {
+        int pile = 2 * (i % 2) - 1;
+
+        bp->game_state->deck[i].start_x = bp->game_state->deck[i].x;
+        bp->game_state->deck[i].start_y = bp->game_state->deck[i].y;
+        bp->game_state->deck[i].start_frame = bp->tick + animation_ticks; 
+        bp->game_state->deck[i].end_frame = bp->tick + 2 * animation_ticks;
+        bp->game_state->deck[i].dest_x = 0.12 * pile + RANDOM_POSITION_OFFSET;
+        bp->game_state->deck[i].dest_y = bp->game_state->deck[i].y + RANDOM_POSITION_OFFSET;
+        bp->game_state->deck[i].start_xy_angle = 0.0f;
+        bp->game_state->deck[i].end_xy_angle = 90.0f * pile;
+        bp->game_state->deck[i].start_xz_angle = 0.0f;
+        bp->game_state->deck[i].end_xz_angle = 60.0f;
+        bp->game_state->deck[i].animation_lift_factor = 0.0f;
+    }
+    bp->final_animation = bp->tick + 3 * animation_ticks + 1;
+}
+
+static void combine_deck(klondike_configuration *bp) {
+     for (int i = 0; i < 52; i++) {
+        bp->game_state->deck[i].start_x = bp->game_state->deck[i].x;
+        bp->game_state->deck[i].start_y = bp->game_state->deck[i].y;
+        bp->game_state->deck[i].dest_x = RANDOM_POSITION_OFFSET;
+        bp->game_state->deck[i].dest_y = RANDOM_POSITION_OFFSET;
+        bp->game_state->deck[i].start_frame = bp->tick; 
+        bp->game_state->deck[i].end_frame = bp->tick + animation_ticks;
+        bp->game_state->deck[i].start_xy_angle = bp->game_state->deck[i].xy_angle;
+        bp->game_state->deck[i].end_xy_angle = bp->game_state->deck[i].xy_angle;;
+        bp->game_state->deck[i].start_xz_angle = bp->game_state->deck[i].xz_angle;
+        bp->game_state->deck[i].end_xz_angle = bp->game_state->deck[i].xz_angle;
+        bp->game_state->deck[i].animation_lift_factor = 0.0f;
+    }
+    bp->final_animation = bp->tick + animation_ticks + 1;
+}
+
+static void shuffle_deck(klondike_configuration *bp) {
+    for (int i = 0; i < 52; i++) {
+        int pile = 2 * (i % 2) - 1;
+
+        bp->game_state->deck[i].start_x = bp->game_state->deck[i].x;
+        bp->game_state->deck[i].start_y = bp->game_state->deck[i].y;
+        bp->game_state->deck[i].start_frame = bp->tick  + i;  
+        bp->game_state->deck[i].end_frame = bp->tick + 1 * animation_ticks + i;
+        bp->game_state->deck[i].dest_x = bp->game_state->deck[i].x;
+        bp->game_state->deck[i].dest_y = bp->game_state->deck[i].y;
+        bp->game_state->deck[i].start_xy_angle = bp->game_state->deck[i].xy_angle;
+        bp->game_state->deck[i].end_xy_angle = bp->game_state->deck[i].xy_angle;
+        bp->game_state->deck[i].start_xz_angle = 60.0f;
+        bp->game_state->deck[i].end_xz_angle = 0.0f;
+        bp->game_state->deck[i].animation_lift_factor = 0.0f;
+    }
+    bp->final_animation = bp->game_state->deck[51].end_frame;
 }
 
 ENTRYPOINT void
@@ -529,6 +626,7 @@ draw_klondike(ModeInfo *mi)
 
      klondike_deal_cards(bp);
      animate_initial_board(bp);
+     bp->redeal_state = REDEAL_DEAL;
  }
 
  bp->tick++;
@@ -573,7 +671,7 @@ draw_klondike(ModeInfo *mi)
  {
      card_struct *card = &(bp->game_state->deck[j]);
      // Only set z position, don't modify x,y here
-     card->z = ds - 1 - j;
+     card->z = j;
      renderCards[animatedCardCount + j] = card;
  }
 
@@ -591,7 +689,7 @@ draw_klondike(ModeInfo *mi)
          float eased2 = ease_in_out_quart(n);
          float eased_card_z = card->start_z * (1.0f - eased2);
          card->z += eased_card_z;
-         card->z += 8 * sin(n * M_PI);
+         card->z += card->animation_lift_factor * 8 * sin(n * M_PI);
      }
      else {
          card->start_z = 0;
@@ -644,7 +742,6 @@ draw_klondike(ModeInfo *mi)
      {
          float n = ((float)bp->tick - (float)card->start_frame) / (card->end_frame - card->start_frame);
          float eased = ease_out_quart(n);
-         float eased2 = ease_in_out_quart(n);
 
          if (card->dest_x != card->start_x)
          {
@@ -668,11 +765,29 @@ draw_klondike(ModeInfo *mi)
 
          if (card->end_angle != card->start_angle)
          {
-             card->angle = card->start_angle + eased2 * (card->end_angle - card->start_angle);
+             card->angle = card->start_angle + n * (card->end_angle - card->start_angle);
          }
          else
          {
              card->angle = card->start_angle;
+         }
+
+         if (card->end_xy_angle != card->start_xy_angle)
+         {
+             card->xy_angle = card->start_xy_angle + n * (card->end_xy_angle - card->start_xy_angle);
+         }
+         else
+         {
+             card->xy_angle = card->start_xy_angle;
+         }
+
+         if (card->end_xz_angle != card->start_xz_angle)
+         {
+             card->xz_angle = card->start_xz_angle + n * (card->end_xz_angle - card->start_xz_angle);
+         }
+         else
+         {
+             card->xz_angle = card->start_xz_angle;
          }
      }
      // Make sure card positions are finalized after animation completes
@@ -681,6 +796,8 @@ draw_klondike(ModeInfo *mi)
          card->x = card->dest_x;
          card->y = card->dest_y;
          card->angle = card->end_angle;
+         card->xy_angle = card->end_xy_angle;
+         card->xz_angle = card->end_xz_angle;
      }
      
      float s = 1.0f;
@@ -720,6 +837,8 @@ draw_klondike(ModeInfo *mi)
 
      glTranslatef(translateX, translateY, translateZ);
      glRotatef(card->angle, 0.0f, 1.0f, 0.0f);
+     glRotatef(card->xy_angle, 0.0f, 0.0f, 1.0f);
+     glRotatef(card->xz_angle, 1.0f, 0.0f, 0.0f);
      glScalef(scaleX, scaleY, scaleZ);
 
      // Bind the appropriate texture
@@ -743,39 +862,86 @@ draw_klondike(ModeInfo *mi)
  glFinish();
  glXSwapBuffers(dpy, window);
 
- if (bp->tick >= last_animation)
+ if (bp->tick >= bp->final_animation)
  {
-     game_state_struct *n = NULL;
-     if (bp->redeal)
-     {
-         n = (game_state_struct *)malloc(sizeof(game_state_struct));
-         bp->tick = 0;
-         bp->final_animation = 0;
-         bp->redeal = 0;
-     }
-     else if (bp->final_animation == 0)
-     {
-         n = klondike_next_move(bp);
-     }
+    printf("redeal state: %d\n", bp->redeal_state);
+ 
+    game_state_struct *n = NULL;
 
-     if (bp->final_animation != 0 && bp->tick >= bp->final_animation)
-     {
-         // resetBoard(game_state);
-         bp->redeal = 1;
-     }
-     else if (bp->final_animation == 0 && n == NULL)
-     {
-         animate_board_to_deck(bp);
+    // the state is what we were doing when the last animation finished
+    switch (bp->redeal_state)
+    {
+        case REDEAL_DEAL:
+                // wait 5 ticks before playing
+                bp->redeal_state = REDEAL_PLAY;
+                bp->final_animation = bp->tick + 5;
+                printf("trying to play for 5 ticks\n");
+            break;
+        case REDEAL_PLAY:
+            // play the next move
+            n = klondike_next_move(bp);
 
-         // Check for win
-# if 0 // unused            
-         int won_game = 0;
-         for (int i = 0; i < 4; i++)
-         {
-             won_game &= (bp->game_state->foundation_size[i] == 13);
-         }
-# endif                
-     }
+            if (n == NULL)  
+            {
+                printf("no moves so collect the deck\n");
+                // no moves so collect the deck
+                bp->redeal_state = REDEAL_COLLECT_DECK;         
+                animate_board_to_deck(bp);     
+            }
+            break;
+        case REDEAL_COLLECT_DECK:
+            // collect the deck            
+            printf("collected the deck. center it.\n");
+            bp->redeal_state = REDEAL_CENTER_DECK;
+
+            bp->game_state->waste_size = 0;
+            for (int i = 0; i < 7; i++)
+            {
+                bp->game_state->tableau_size[i] = 0;
+            }
+
+            for (int i = 0; i < 4; i++)
+            {
+                bp->game_state->foundation_size[i] = 0;
+            }
+            
+            center_deck(bp);
+            // last_animation = bp->tick + 5;
+            break;
+        case REDEAL_CENTER_DECK:
+            printf("centered the deck. home it.\n");
+            split_deck(bp);
+            bp->redeal_state = REDEAL_SPLIT_DECK;
+            break;
+        case REDEAL_SPLIT_DECK:
+            printf("split the deck. shuffle it.\n");
+            bp->redeal_state = REDEAL_SHUFFLE_DECK;
+            shuffle_deck(bp);
+            break;
+
+        case REDEAL_SHUFFLE_DECK:
+            printf("shuffled the deck. recombine it.\n");
+            bp->redeal_state = REDEAL_COMBINE_DECKS;
+            combine_deck(bp);
+            break;
+        case REDEAL_COMBINE_DECKS:
+            printf("combined the deck. home it.\n");
+
+            bp->redeal_state = REDEAL_HOME_DECK;
+            home_deck(bp);
+            break;
+
+        case REDEAL_HOME_DECK:
+            printf("homed the deck. deal again.\n");
+            
+            bp->tick = 0;
+            klondike_initialize_deck(bp);
+            klondike_shuffle_deck(bp->game_state->deck);
+
+            animate_initial_board(bp);
+            bp->redeal_state = REDEAL_DEAL;
+            break;
+    }
 
      if (n != NULL)
      {
@@ -784,6 +950,7 @@ draw_klondike(ModeInfo *mi)
      }
  }
 }
+
 
 ENTRYPOINT void
 free_klondike(ModeInfo *mi)

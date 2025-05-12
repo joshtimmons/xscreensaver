@@ -34,10 +34,10 @@ void klondike_initialize_deck(klondike_configuration *bp)
             deck[index].suit = (Suit)suit;
             deck[index].rank = (Rank)rank;
             deck[index].is_face_up = 0;
-            deck[index].x = bp->deck_x;
-            deck[index].y = bp->deck_y;
-            deck[index].start_x = bp->deck_x + RANDOM_POSITION_OFFSET;
-            deck[index].start_y = bp->deck_y + RANDOM_POSITION_OFFSET;
+            deck[index].x = bp->deck_x + RANDOM_POSITION_OFFSET;
+            deck[index].y = bp->deck_y + RANDOM_POSITION_OFFSET;
+            deck[index].start_x = deck[index].x;
+            deck[index].start_y = deck[index].y;
             deck[index].dest_x = bp->deck_x + RANDOM_POSITION_OFFSET;
             deck[index].dest_y = bp->deck_y + RANDOM_POSITION_OFFSET;
             deck[index].start_frame = 0;
@@ -54,6 +54,8 @@ void klondike_initialize_deck(klondike_configuration *bp)
             deck[index].end_xz_angle = 0.0f;
             deck[index].xz_angle = 0.0f;
             deck[index].animation_lift_factor = 0.0f;
+            deck[index].pile = 0;
+            deck[index].pile_index = 51-index;
             index++;
         }
     }
@@ -65,9 +67,13 @@ void klondike_shuffle_deck(card_struct deck[])
     for (int i = NUM_CARDS - 1; i > 0; i--)
     {
         int j = random() % (i + 1);
-        card_struct temp = deck[i];
-        deck[i] = deck[j];
-        deck[j] = temp;
+        // Only swap suit and rank
+        Suit temp_suit = deck[i].suit;
+        Rank temp_rank = deck[i].rank;
+        deck[i].suit = deck[j].suit;
+        deck[i].rank = deck[j].rank;
+        deck[j].suit = temp_suit;
+        deck[j].rank = temp_rank;
     }
 }
 
@@ -172,7 +178,7 @@ static void reset_waste(klondike_configuration *bp, game_state_struct *game_stat
 {
     for (int i = 0; i < game_state->waste_size; i++)
     {
-        game_state->deck[i] = game_state->waste[i];
+        game_state->deck[i] = game_state->waste[game_state->waste_size - i - 1];
 
         card_struct *animated_card = &game_state->deck[i];
         animated_card->start_frame = bp->tick + (i+5) * bp->animation_ticks / 3;
@@ -184,10 +190,13 @@ static void reset_waste(klondike_configuration *bp, game_state_struct *game_stat
         animated_card->start_angle = 180.0f;
         animated_card->end_angle = 360.0f;
         animated_card->start_z = animated_card->z;
+        animated_card->start_pile_index = animated_card->pile_index;
+        animated_card->end_pile_index = i;
+        animated_card->pile = 0;
         
-        game_state->waste[i].rank = NONE;
-        game_state->waste[i].suit = 0;
-        game_state->waste[i].is_face_up = 0;
+        game_state->waste[game_state->waste_size - i - 1].rank = NONE;
+        game_state->waste[game_state->waste_size - i - 1].suit = 0;
+        game_state->waste[game_state->waste_size - i - 1].is_face_up = 0;
     }
 
     game_state->waste_size = 0;
@@ -243,6 +252,9 @@ static game_state_struct *move_card_to_foundation(klondike_configuration *bp, ga
                 ret->foundation[card->suit][ret->foundation_size[card->suit]].dest_y = bp->foundation_placeholders[card->suit].y;
                 ret->foundation[card->suit][ret->foundation_size[card->suit]].start_angle = ret->foundation[card->suit][ret->foundation_size[card->suit]].end_angle;
                 ret->foundation[card->suit][ret->foundation_size[card->suit]].start_z = ret->foundation[card->suit][ret->foundation_size[card->suit]].z + 3;
+                ret->foundation[card->suit][ret->foundation_size[card->suit]].start_pile_index = ret->foundation[card->suit][ret->foundation_size[card->suit]].pile_index;
+                ret->foundation[card->suit][ret->foundation_size[card->suit]].end_pile_index = ret->foundation_size[card->suit] + 1;
+                ret->foundation[card->suit][ret->foundation_size[card->suit]].pile = card->suit + 8;
 
                 ret->foundation_size[card->suit]++;
 
@@ -266,6 +278,9 @@ static game_state_struct *move_card_to_foundation(klondike_configuration *bp, ga
             ret->foundation[card->suit][ret->foundation_size[card->suit]].dest_y = bp->foundation_placeholders[card->suit].y;
             ret->foundation[card->suit][ret->foundation_size[card->suit]].start_angle = ret->foundation[card->suit][ret->foundation_size[card->suit]].end_angle;
             ret->foundation[card->suit][ret->foundation_size[card->suit]].start_z = ret->foundation[card->suit][ret->foundation_size[card->suit]].z + 3;
+            ret->foundation[card->suit][ret->foundation_size[card->suit]].start_pile_index = ret->foundation[card->suit][ret->foundation_size[card->suit]].pile_index;
+            ret->foundation[card->suit][ret->foundation_size[card->suit]].end_pile_index = ret->foundation_size[card->suit] + 1;
+            ret->foundation[card->suit][ret->foundation_size[card->suit]].pile = card->suit + 8;
 
             ret->foundation_size[card->suit]++;
             ret->waste_size--;
@@ -323,7 +338,10 @@ static game_state_struct *move_king_to_empty_tableau(klondike_configuration *bp)
                 animated_card->start_angle = 180.0f;
                 animated_card->end_angle = 180.0f;
                 animated_card->start_z = animated_card->z;
-
+                animated_card->start_pile_index = animated_card->pile_index;
+                animated_card->end_pile_index = 0;
+                animated_card->pile = i;
+                
                 return ret;
             }
         }
@@ -447,6 +465,9 @@ static game_state_struct *move_tableau_base_card_to_tableau(klondike_configurati
                                     animated_card->dest_y = bp->tableau_placeholders[j].y - (is_face_up + k - baseCardIndex) * 0.05 + RANDOM_POSITION_OFFSET;
                                     animated_card->start_angle = animated_card->end_angle;
                                     animated_card->start_z = animated_card->z;
+                                    animated_card->start_pile_index = animated_card->pile_index;
+                                    animated_card->end_pile_index = ret->tableau_size[j] + 1;
+                                    animated_card->pile = j;
 
                                     ret->tableau_size[j]++;
                                 }
@@ -592,6 +613,9 @@ static game_state_struct *move_waste_to_tableau(klondike_configuration *bp)
                 animated_card->start_angle = 180.0f;
                 animated_card->end_angle = 180.0f;
                 animated_card->start_z = animated_card->z;
+                animated_card->start_pile_index = animated_card->pile_index;
+                animated_card->end_pile_index = ret->tableau_size[i] + 1;
+                animated_card->pile = i;
 
                 ret->tableau_size[i]++;
                 ret->waste_size--;
@@ -614,6 +638,9 @@ static game_state_struct *move_waste_to_tableau(klondike_configuration *bp)
                 animated_card->start_angle = 180.0f;
                 animated_card->end_angle = 180.0f;
                 animated_card->start_z = animated_card->z;
+                animated_card->start_pile_index = animated_card->pile_index;
+                animated_card->end_pile_index = ret->tableau_size[i] + 1;
+                animated_card->pile = i;
 
                 ret->tableau_size[i]++;
                 ret->waste_size--;
@@ -649,14 +676,24 @@ static game_state_struct *move_deck_to_waste(klondike_configuration *bp)
         return NULL;
     }
 
-    for (int i = 0; i < bp->draw_count; i++)
+    int deckSize = klondike_deck_size(ret);
+    printf("deck size %d\n", deckSize);
+    for (int i = 0; i < 52; i++)
+    {
+        printf("deck %d suit %d rank %d\n", i, ret->deck[i].suit, ret->deck[i].rank);
+    }
+
+    int local_draw_count = deckSize < bp->draw_count ? deckSize : bp->draw_count;
+
+    for (int i = 0; i < local_draw_count; i++)
     {
         if (boardSize < 52)
         {
-            ret->waste[ret->waste_size] = ret->deck[0];
+            ret->waste[ret->waste_size] = ret->deck[deckSize - 1];
             ret->waste[ret->waste_size].is_face_up = 1;
 
             card_struct *animated_card = &ret->waste[ret->waste_size];
+            printf("animated card suit %d rank %d\n", animated_card->suit, animated_card->rank);
             animated_card->start_frame = bp->tick + bp->animation_ticks / 4 * i;
             animated_card->end_frame = animated_card->start_frame + bp->animation_ticks;
             animated_card->start_x = bp->deck_x;
@@ -666,10 +703,16 @@ static game_state_struct *move_deck_to_waste(klondike_configuration *bp)
             animated_card->start_angle = 0.0f;
             animated_card->end_angle = 180.0f;
             animated_card->start_z = animated_card->z;
+            animated_card->start_pile_index = animated_card->pile_index;
+            animated_card->end_pile_index = ret->waste_size + 1;
+            animated_card->pile = 0;
 
             ret->waste_size++;
 
-            remove_card_from_deck(ret, &ret->deck[0]);
+            remove_card_from_deck(ret, &ret->deck[deckSize - 1]);
+            deckSize--;
+            ret->deck[deckSize].rank = 0;
+            ret->deck[deckSize].suit = 0;
         }
 
         boardSize++;
@@ -773,7 +816,6 @@ game_state_struct *klondike_next_move(klondike_configuration *bp)
 {
     game_state_struct *ret = NULL;
 
-#ifdef MAKE_A_MOVE    
     if ((ret = next_move_inner(bp)))
     {
         ret->moves++;
@@ -810,6 +852,6 @@ game_state_struct *klondike_next_move(klondike_configuration *bp)
 
         return ret;
     }
-#endif 
+
     return NULL;
 }

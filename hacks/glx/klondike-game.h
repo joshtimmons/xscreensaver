@@ -44,6 +44,11 @@ typedef struct {
     Rank rank;
     int is_face_up; // 0 for face down, 1 for face up
 
+    int pile;
+    int pile_index;    // Current interpolated pile index during animation
+    int start_pile_index;  // Starting pile index when animation begins
+    int end_pile_index;    // Target pile index for animation
+    
     float x;
     float y;
     float z;
@@ -112,6 +117,7 @@ typedef struct {
   int draw_count;
   int camera_speed;
   Bool sloppy;
+  int add_lift_to_animation;
 
 } klondike_configuration;
 

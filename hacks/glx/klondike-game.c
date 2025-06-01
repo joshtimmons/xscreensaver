@@ -55,7 +55,7 @@ void klondike_initialize_deck(klondike_configuration *bp)
             deck[index].xz_angle = 0.0f;
             deck[index].animation_lift_factor = 0.0f;
             deck[index].pile = 0;
-            deck[index].pile_index = 51-index;
+            deck[index].pile_index = 51 - index;
             index++;
         }
     }
@@ -178,22 +178,22 @@ static void reset_waste(klondike_configuration *bp, game_state_struct *game_stat
 {
     for (int i = 0; i < game_state->waste_size; i++)
     {
-        game_state->deck[i] = game_state->waste[game_state->waste_size - i - 1];
+        game_state->deck[game_state->waste_size - i - 1] = game_state->waste[game_state->waste_size - i - 1];
 
-        card_struct *animated_card = &game_state->deck[i];
-        animated_card->start_frame = bp->tick + (i+5) * bp->animation_ticks / 3;
-        animated_card->end_frame = bp->tick + (i+5) * bp->animation_ticks / 3 + bp->animation_ticks;
+        card_struct *animated_card = &game_state->deck[game_state->waste_size - i - 1];
+        animated_card->start_frame = bp->tick + (i + 5) * bp->animation_ticks / 3;
+        animated_card->end_frame = bp->tick + (i + 5) * bp->animation_ticks / 3 + bp->animation_ticks;
         animated_card->start_x = animated_card->x;
         animated_card->start_y = animated_card->y;
         animated_card->dest_x = bp->deck_x + RANDOM_POSITION_OFFSET;
         animated_card->dest_y = bp->deck_y + RANDOM_POSITION_OFFSET;
         animated_card->start_angle = 180.0f;
         animated_card->end_angle = 360.0f;
-        animated_card->start_z = animated_card->z;
+        // animated_card->start_z = animated_card->z;
         animated_card->start_pile_index = animated_card->pile_index;
-        animated_card->end_pile_index = i;
+        animated_card->end_pile_index = game_state->waste_size - i - 1;
         animated_card->pile = 0;
-        
+
         game_state->waste[game_state->waste_size - i - 1].rank = NONE;
         game_state->waste[game_state->waste_size - i - 1].suit = 0;
         game_state->waste[game_state->waste_size - i - 1].is_face_up = 0;
@@ -341,7 +341,7 @@ static game_state_struct *move_king_to_empty_tableau(klondike_configuration *bp)
                 animated_card->start_pile_index = animated_card->pile_index;
                 animated_card->end_pile_index = 0;
                 animated_card->pile = i;
-                
+
                 return ret;
             }
         }
@@ -395,8 +395,8 @@ static int can_move_to_tableau(game_state_struct *game_state, card_struct *card,
 }
 
 // TODO: Prefer moving tableaus with more hidden cards
-// Move the visible cards from one table tableau onto another tableau if the top card of the destination tableau is the 
-//opposite color and one rank higher than the bottom card of the source tableau
+// Move the visible cards from one table tableau onto another tableau if the top card of the destination tableau is the
+// opposite color and one rank higher than the bottom card of the source tableau
 static game_state_struct *move_tableau_base_card_to_tableau(klondike_configuration *bp)
 {
     game_state_struct *game_state = bp->game_state;
@@ -677,11 +677,6 @@ static game_state_struct *move_deck_to_waste(klondike_configuration *bp)
     }
 
     int deckSize = klondike_deck_size(ret);
-    printf("deck size %d\n", deckSize);
-    for (int i = 0; i < 52; i++)
-    {
-        printf("deck %d suit %d rank %d\n", i, ret->deck[i].suit, ret->deck[i].rank);
-    }
 
     int local_draw_count = deckSize < bp->draw_count ? deckSize : bp->draw_count;
 
@@ -693,7 +688,6 @@ static game_state_struct *move_deck_to_waste(klondike_configuration *bp)
             ret->waste[ret->waste_size].is_face_up = 1;
 
             card_struct *animated_card = &ret->waste[ret->waste_size];
-            printf("animated card suit %d rank %d\n", animated_card->suit, animated_card->rank);
             animated_card->start_frame = bp->tick + bp->animation_ticks / 4 * i;
             animated_card->end_frame = animated_card->start_frame + bp->animation_ticks;
             animated_card->start_x = bp->deck_x;
@@ -754,6 +748,21 @@ static game_state_struct *turn_over_last_tableau_card(klondike_configuration *bp
 static game_state_struct *next_move_inner(klondike_configuration *bp)
 {
     game_state_struct *ret = NULL;
+
+    if (bp->game_state->moves_since_waste_flip == 0)
+    {
+        printf("Good time to reverse the deck");
+
+        int ds = klondike_deck_size(bp->game_state);
+        for (int i = 0; i < ds / 2; i++)
+        {
+            card_struct temp = bp->game_state->deck[i];
+            bp->game_state->deck[i] = bp->game_state->deck[ds - i - 1];
+            bp->game_state->deck[i].pile_index = i;
+            bp->game_state->deck[ds - i - 1] = temp;
+            bp->game_state->deck[ds - i - 1].pile_index = ds - i - 1;
+        }
+    }
 
     if ((ret = turn_over_last_tableau_card(bp)))
     {

@@ -498,7 +498,7 @@ static void animate_board_to_deck(klondike_configuration *bp)
     {
         for (int j = 0; j < bp->game_state->foundation_size[i]; j++)
         {
-            card_struct *card = &bp->game_state->foundation[i][j];
+            card_struct *card = &bp->game_state->foundation[i][bp->game_state->foundation_size[i] - j - 1];
             card->start_frame = bp->tick + n * animation_ticks / 3;
             card->end_frame = card->start_frame + animation_ticks;
             card->start_x = card->x;
@@ -691,7 +691,7 @@ static void shuffle_deck(klondike_configuration *bp)
         bp->game_state->deck[i].end_xz_angle = 0;
         bp->game_state->deck[i].animation_lift_factor = 0.0f;
         bp->game_state->deck[i].pile = 0;
-        bp->game_state->deck[i].start_pile_index = bp->game_state->deck[i].pile_index;
+        bp->game_state->deck[i].start_pile_index = n; //bp->game_state->deck[i].pile_index;
         bp->game_state->deck[i].end_pile_index = n;
     }
     bp->final_animation = bp->game_state->deck[51].end_frame;
@@ -824,22 +824,28 @@ draw_klondike(ModeInfo *mi)
     for (int i = 0; i < animatedCardCount; i++)
     {
         card_struct *card = renderCards[i];
-
-        card->z = card->pile_index / 10.0f;
+        float base_z;
 
         if (bp->tick >= card->start_frame && bp->tick < card->end_frame)
         {
+            // During animation: interpolate between start and end pile_index
             float n = ((float)bp->tick - (float)card->start_frame) / (card->end_frame - card->start_frame);
-            float eased2 = ease_in_out_quart(n);
-            card->z += 8 * sin(n * M_PI) * bp->add_lift_to_animation;
+            float eased = ease_in_out_quart(n);
+            base_z = card->start_pile_index + eased * (card->end_pile_index - card->start_pile_index);
+            base_z /= 10.0f;
+            
+            // Add animation lift effect
+            base_z += 8 * sin(n * M_PI) * bp->add_lift_to_animation;
         }
-        else if (bp->tick >= card->end_frame)
+        else
         {
-            card->start_z = 0;
+            // Not animating: use current pile_index
+            base_z = card->pile_index / 10.0f;
         }
+        card->z = base_z;
     }
 
-    // qsort the rendercards by animation order
+    // Sort cards by z-index to ensure proper rendering order
     qsort(renderCards, animatedCardCount, sizeof(card_struct *), compare_cards);
 
     // camera
